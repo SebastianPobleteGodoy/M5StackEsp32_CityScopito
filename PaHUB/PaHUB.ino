@@ -6,6 +6,9 @@
 MFRC522 mfrc522(0x28); // Crea las instancias del sensor RFID
 ClosedCube::Wired::TCA9548A tca9548a; // Crea el objeto para poder usar el multiplexor
 
+// Definir una matriz 3x2 para almacenar los UIDs de las tarjetas RFID detectadas
+String tarjetas[3][2];
+
 void setup() {
   M5.begin();
   M5.Power.begin();
@@ -28,33 +31,58 @@ void checkRFIDOnChannel(int channel) {
   for (int attempt = 0; attempt < 3; attempt++) {
     if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) { // Verifica si hay una nueva tarjeta y lee el serial
       cardDetected = true;
-      Serial.print("Canal ");
-      Serial.print(channel);
-      Serial.print(": UID de tarjeta detectada: ");
+      // Almacena el UID de la tarjeta en la matriz
+      String uid = "";
       for (byte j = 0; j < mfrc522.uid.size; j++) {
-        Serial.print(mfrc522.uid.uidByte[j] < 0x10 ? " 0" : " ");
-        Serial.print(mfrc522.uid.uidByte[j], HEX);
+        uid += (mfrc522.uid.uidByte[j] < 0x10 ? " 0" : " ");
+        uid += String(mfrc522.uid.uidByte[j], HEX);
       }
-      Serial.println();
-      break;
+
+        for(int j = 0; j < 3; j++){
+          for(int k = 0; k < 2; k++){
+            if(j*2 + k == channel) { // Solo asigna el UID en la posición correspondiente al canal actual
+            tarjetas[j][k] = uid;
+        }
     }
+}
+
     
+    }
   }
 
   if (!cardDetected) {
-    Serial.print("Canal ");
-    Serial.print(channel);
-    Serial.println(": No se detectó tarjeta.");
+    // Si no se detecta ninguna tarjeta, deja el espacio en blanco en la matriz
+    tarjetas[channel/2][channel%2] = "";
   }
 
   delay(10); // Espera antes de cambiar al siguiente canal
 }
 
 void loop() {
+  // Reinicia la matriz en cada iteración del bucle principal
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 2; j++) {
+      tarjetas[i][j] = "";
+    }
+  }
+
+  // Lee las tarjetas en cada canal y almacena la información en la matriz
   for (int i = 0; i < 6; i++) {
     checkRFIDOnChannel(i);
   }
-  delay(30); // Espera antes de volver a iniciar el ciclo
+  
+  // Imprime la matriz en el Serial.print
+  Serial.println("Matriz de UIDs:");
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 2; j++) {
+      Serial.print("(");
+      Serial.print(tarjetas[i][j]);
+      Serial.print(")");
+    }
+    Serial.println();
+  }
+
+  delay(15); // Espera antes de volver a iniciar el ciclo
 }
 
 
