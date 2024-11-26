@@ -1,7 +1,6 @@
 #include <M5Unified.h>
-#include <M5StackMenuSystem.h>
-#include "ClosedCube_TCA9548A.h"
-#include "MFRC522_I2C.h"
+#include <ClosedCube_TCA9548A.h>
+#include <MFRC522_I2C.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -11,18 +10,14 @@
 MFRC522 mfrc522(0x28);
 ClosedCube::Wired::TCA9548A tca9548a;
 
-int tarjetas[6];
+int tarjetas[6]; // Para los canales 6 al 11
 String uids[6];
 
 const char* ssid = "Administrativos";
 const char* password = "CLBBMIT!!";
 const char* postURL = "http://192.168.31.48:8000/process-json";
-const char* getURL = "http://192.168.31.48:8000/categoria/";
 
-Menu mainMenu("Seleccione Mapa ");
-
-// Variables para manejar el estado del menú y la lectura de UID
-bool inMenu = false;
+// Variables para manejar la lectura de UID
 bool readUIDs = true;
 
 int mapUIDToValue(String uid) {
@@ -51,20 +46,12 @@ void setup() {
 
     connectToWiFi();
 
-    for (int i = 0; i < 6; i++) {
-        tca9548a.selectChannel(i);
+    // Inicializar los lectores RFID para los canales 6 al 11
+    for (int i = 6; i < 12; i++) {
+        tca9548a.selectChannel(i - 6);  // Ajustar índice para los lectores 6-11
         mfrc522.PCD_Init();
         Serial.println("Lector " + String(i) + " iniciado");
     }
-
-    mainMenu.addMenuItem("tramites", handleMenuItem);
-    mainMenu.addMenuItem("servicios", handleMenuItem);
-    mainMenu.addMenuItem("comercio", handleMenuItem);
-    mainMenu.addMenuItem("comida_abastecimiento", handleMenuItem);
-    mainMenu.addMenuItem("comida_servir", handleMenuItem);
-    mainMenu.addMenuItem("deportes_privado", handleMenuItem);
-    mainMenu.addMenuItem("deportes_publico", handleMenuItem);
-    mainMenu.addMenuItem("salud_privada", handleMenuItem);
 }
 
 void connectToWiFi() {
@@ -94,25 +81,6 @@ void connectToWiFi() {
     M5.Lcd.print(WiFi.localIP());
 }
 
-void handleMenuItem(CallbackMenuItem& menuItem) {
-    M5.Lcd.clear(BLACK);
-    mainMenu.disable();
-    inMenu = false; // Regresar a la lectura de UID
-
-    String item = menuItem.getText();
-    String url = getURL + item;
-    
-    // Realizar la solicitud GET en una función asíncrona
-    sendGetRequest(url);
-}
-
-void sendGetRequest(String url) {
-    HTTPClient http;
-    http.begin(url);
-    http.GET(); // Enviar la solicitud GET sin esperar la respuesta
-    http.end(); // Finalizar la conexión sin esperar la respuesta
-}
-
 String getUIDString() {
   String uid = "";
   for (byte i = 0; i < mfrc522.uid.size; i++) {
@@ -124,7 +92,7 @@ String getUIDString() {
 }
 
 void checkRFIDOnChannel(int channel) {
-  tca9548a.selectChannel(channel);
+  tca9548a.selectChannel(channel - 6);  // Ajustar para los canales 6-11
   delay(10);
   
   bool cardDetected = false;
@@ -135,8 +103,8 @@ void checkRFIDOnChannel(int channel) {
       String uid = getUIDString();
       int value = mapUIDToValue(uid);
 
-      tarjetas[channel] = value;
-      uids[channel] = uid;
+      tarjetas[channel - 6] = value;  // Almacenar valor para canales 6-11
+      uids[channel - 6] = uid;
       
       Serial.print("Canal ");
       Serial.print(channel);
@@ -150,8 +118,8 @@ void checkRFIDOnChannel(int channel) {
   }
 
   if (!cardDetected) {
-    tarjetas[channel] = 0;
-    uids[channel] = "";
+    tarjetas[channel - 6] = 0;
+    uids[channel - 6] = "";
   }
 
   delay(10);
@@ -160,12 +128,12 @@ void checkRFIDOnChannel(int channel) {
 String createJSON() {
   DynamicJsonDocument doc(1024);  // Tamaño del buffer para el JSON
 
-  for (int i = 0; i < 6; i++) {
-    int value = tarjetas[i];  // Asegurarse de que value sea un entero
-    String uid = uids[i];
+  for (int i = 6; i < 12; i++) {
+    int value = tarjetas[i - 6];  // Ajustar para canales 6-11
+    String uid = uids[i - 6];
 
     if (value != 0 || !uid.isEmpty()) {  // Incluir en el JSON si el valor es diferente de 0 o si hay un UID
-      doc[String("canal_") + i] = value;  // Asignar el valor como entero
+      doc[String("canal_") + i] = value;  // Almacenar valores de los canales 6-11
     }
   }
 
@@ -197,14 +165,14 @@ void updateScreen() {
     M5.Lcd.setTextSize(2);
 
     bool anyUIDDetected = false;
-    for (int i = 0; i < 6; i++) {
-        if (tarjetas[i] != 0 || !uids[i].isEmpty()) {
+    for (int i = 6; i < 12; i++) {
+        if (tarjetas[i - 6] != 0 || !uids[i - 6].isEmpty()) {
             anyUIDDetected = true;
             M5.Lcd.setTextColor(WHITE);
             M5.Lcd.print("Canal ");
             M5.Lcd.print(i);
             M5.Lcd.print(": UID = ");
-            M5.Lcd.println(uids[i]);
+            M5.Lcd.println(uids[i - 6]);
         }
     }
 
@@ -216,33 +184,29 @@ void updateScreen() {
 void loop() {
     M5.update();
 
-    if (mainMenu.isEnabled()) {
-        mainMenu.loop();
-    } else {
-        if (readUIDs) {
-            bool allChannelsDetected = true;
-            for (int i = 0; i < 6; i++) {
-                checkRFIDOnChannel(i);
+    if (readUIDs) {
+        bool allChannelsDetected = true;
+        for (int i = 6; i < 12; i++) {
+            checkRFIDOnChannel(i);  // Leer canales 6 al 11
+        }
+
+        updateScreen(); // Actualizar la pantalla con el estado de los canales
+
+        for (int i = 6; i < 12; i++) {
+            if (tarjetas[i - 6] == 0 && uids[i - 6].isEmpty()) {
+                allChannelsDetected = false;
+                break;
             }
+        }
 
-            updateScreen(); // Actualizar la pantalla con el estado de los canales
+        if (allChannelsDetected) {
+            String json = createJSON();
+            Serial.println("JSON de UIDs:");
+            Serial.println(json);
 
-            for (int i = 0; i < 6; i++) {
-                if (tarjetas[i] == 0 && uids[i].isEmpty()) {
-                    allChannelsDetected = false;
-                    break;
-                }
-            }
-
-            if (allChannelsDetected) {
-                String json = createJSON();
-                Serial.println("JSON de UIDs:");
-                Serial.println(json);
-
-                sendPostRequest(json);
-            } else {
-                Serial.println("No se detectaron UIDs en todos los canales.");
-            }
+            sendPostRequest(json);
+        } else {
+            Serial.println("No se detectaron UIDs en todos los canales.");
         }
 
         delay(10); // Evitar sobrecarga del CPU
