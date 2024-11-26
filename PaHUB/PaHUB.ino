@@ -102,7 +102,7 @@ void handleMenuItem(CallbackMenuItem& menuItem) {
     String item = menuItem.getText();
     String url = getURL + item;
     
-    // Realizar la solicitud GET en una función asíncrona
+    // Realizar la solicitud GET 
     sendGetRequest(url);
 }
 
@@ -161,7 +161,7 @@ String createJSON() {
   DynamicJsonDocument doc(1024);  // Tamaño del buffer para el JSON
 
   for (int i = 0; i < 6; i++) {
-    int value = tarjetas[i];  // Asegurarse de que value sea un entero
+    int value = tarjetas[i];  
     String uid = uids[i];
 
     if (value != 0 || !uid.isEmpty()) {  // Incluir en el JSON si el valor es diferente de 0 o si hay un UID
