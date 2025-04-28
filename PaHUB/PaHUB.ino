@@ -5,19 +5,25 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-
+#include <ESPmDNS.h>   
 #define PaHub_I2C_ADDRESS 0x70
 
 MFRC522 mfrc522(0x28);
 ClosedCube::Wired::TCA9548A tca9548a;
-
+ 
 int tarjetas[6];
 String uids[6];
 
 const char* ssid = "Administrativos";
 const char* password = "CLBBMIT!!";
-const char* postURL = "http://192.168.31.48:8000/process-json";
-const char* getURL = "http://192.168.31.48:8000/categoria/";
+//const char* postURL = "http://192.168.31.44:8000/process-json";
+//const char* getURL = "http://192.168.31.44:8000/categoria/";
+const char* serverHost = "citylab.local";   // hostname mDNS de tu Raspberry
+const int   serverPort = 8000;
+
+String buildURL(const String& path) {
+  return String("http://") + serverHost + ":" + serverPort + path;
+}
 
 Menu mainMenu("Seleccione Mapa ");
 
@@ -26,31 +32,31 @@ bool inMenu = false;
 bool readUIDs = true;
 
 int mapUIDToValue(String uid) {
-  if (uid == "04CA5D3CBB2A81") return 1;
-  if (uid == "042EF304BB2A81") return 1;
-  if (uid == "04A1F304BB2A81") return 1;
-  if (uid == "04CBF304BB2A81") return 1;
-  if (uid == "0436F404BB2A81") return 1;
-  if (uid == "0416F404BB2A81") return 1;
-  if (uid == "049EF304BB2A81") return 0;
-  if (uid == "042FF304BB2A81") return 0;
-  if (uid == "049FF304BB2A81") return 0;
-  if (uid == "04D35D3CBB2A81") return 0;
-  if (uid == "04CB5D3CBB2A81") return 0;
-  if (uid == "043AF304BB2A81") return 0;
+  if (uid == "04CC5D3CBB2A81") return 1;// ok plan 6 futuro
+  if (uid == "042EF304BB2A81") return 1;//ok plan 4 futuro
+  if (uid == "04A1F304BB2A81") return 1;//ok plan 4 actual 
+  if (uid == "04CAF304BB2A81") return 1;//ok plan 2 actual 
+  if (uid == "0435F404BB2A81") return 1;//ok plan 6 actual  
+  if (uid == "0416F404BB2A81") return 1;//ok plan 1 futuro
+  if (uid == "049EF304BB2A81") return 0;//ok plan 5 futuro
+  if (uid == "042FF304BB2A81") return 0;//ok plan 3 actual
+  if (uid == "049FF304BB2A81") return 0;//ok plan  5 actual
+  if (uid == "04D35D3CBB2A81") return 0;//ok plan 1 actual 
+  if (uid == "04CB5D3CBB2A81") return 0;//ok plan 2 futuro
+  if (uid == "043AF304BB2A81") return 0;//ok plan 3 futuro 
   return 0;
 }
 
 void setup() {
     M5.begin();
     M5.Power.begin();
-    Wire.begin();
     Serial.begin(115200);
     tca9548a.address(PaHub_I2C_ADDRESS);
     Serial.println("PaHUB Example");
 
     connectToWiFi();
 
+    tca9548a.address(PaHub_I2C_ADDRESS);
     for (int i = 0; i < 6; i++) {
         tca9548a.selectChannel(i);
         mfrc522.PCD_Init();
@@ -83,6 +89,12 @@ void connectToWiFi() {
     Serial.print("Dirección IP: ");
     Serial.println(WiFi.localIP());
 
+    if (!MDNS.begin("m5rfid")) {
+      Serial.println("⚠️  mDNS no pudo iniciar");
+    } else {
+      Serial.println("mDNS iniciado: http://m5rfid.local");
+    }
+
     M5.Lcd.fillScreen(BLACK);
     M5.Lcd.setTextSize(2);
     M5.Lcd.setCursor(10, 10);
@@ -100,7 +112,7 @@ void handleMenuItem(CallbackMenuItem& menuItem) {
     inMenu = false; // Regresar a la lectura de UID
 
     String item = menuItem.getText();
-    String url = getURL + item;
+    String url = buildURL("/categoria/" + item);
     
     // Realizar la solicitud GET 
     sendGetRequest(url);
@@ -177,7 +189,7 @@ String createJSON() {
 void sendPostRequest(String json) {
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(postURL);
+    http.begin(buildURL("/process-json")); 
     http.addHeader("Content-Type", "application/json");
 
     Serial.println("Enviando solicitud POST...");
